@@ -235,46 +235,10 @@
 
 </div>
 
+<script src="questions.js"></script>
 <script>
 "use strict";
-
-/* =========================================================
-   データ
-   ========================================================= */
-const OXIDIZERS = [
-  { name:"過マンガン酸イオン（酸性条件下）",       change:"MnO4^- → Mn^2+" },
-  { name:"過マンガン酸イオン（中・塩基性条件下）", change:"MnO4^- → MnO2" },
-  { name:"酸化マンガン(IV)（酸性条件下）",         change:"MnO2 → Mn^2+" },
-  { name:"二クロム酸イオン",                       change:"Cr2O7^2- → 2Cr^3+" },
-  { name:"濃硝酸",                                 change:"HNO3 → NO2" },
-  { name:"希硝酸",                                 change:"HNO3 → NO" },
-  { name:"熱濃硫酸",                               change:"H2SO4 → SO2" },
-  { name:"二酸化硫黄（例外的）",                   change:"SO2 → S" },
-  { name:"過酸化水素（通常）",                     change:"H2O2 → 2H2O" },
-  { name:"塩素",                                   change:"Cl2 → 2Cl^-" },
-  { name:"オゾン",                                 change:"O3 → O2" },
-  { name:"酸素",                                   change:"O2 → 2H2O" }
-];
-
-const REDUCERS = [
-  { name:"シュウ酸",                 change:"H2C2O4 → 2CO2" },
-  { name:"過酸化水素（例外的）",     change:"H2O2 → O2" },
-  { name:"水素",                     change:"H2 → 2H^+" },
-  { name:"硫化水素",                 change:"H2S → S" },
-  { name:"二酸化硫黄（通常）",       change:"SO2 → SO4^2-" },
-  { name:"ヨウ化物イオン",           change:"2I^- → I2" },
-  { name:"ナトリウム",               change:"Na → Na^+" },
-  { name:"チオ硫酸イオン",           change:"2S2O3^2- → S4O6^2-" },
-  { name:"鉄(II)イオン",             change:"Fe^2+ → Fe^3+" },
-  { name:"スズ(II)イオン",           change:"Sn^2+ → Sn^4+" },
-  { name:"アルデヒド（塩基性条件下）", change:"RCHO → RCOO^-" }
-];
-
-// 全問題（id・役割つき）
-const ITEMS = [
-  ...OXIDIZERS.map(o => ({ ...o, role:"ox" })),
-  ...REDUCERS.map(o => ({ ...o, role:"rd" }))
-].map((it, i) => ({ ...it, id:i }));
+// 問題データ（OXIDIZERS / REDUCERS / ITEMS）は questions.js で定義
 
 const ROLE_LABEL = { ox:"酸化剤", rd:"還元剤" };
 
