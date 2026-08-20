@@ -30,7 +30,7 @@ const OXIDIZERS = [
   { name:"二クロム酸イオン",
     eq:"Cr2O7^2- + 14H^+ + 6e^- → 2Cr^3+ + 7H2O",
     change:"Cr2O7^2- → 2Cr^3+", n:6, level:"基礎",
-    note:"赤橙色から緑色へ。Cr2個ぶんで電子6個と多く、H^+が14個必要なので暗記必須。" },
+    note:"赤橙色から緑色へ。Cr原子2個ぶんで電子6個と多く、H^+が14個必要なので暗記必須。" },
   { name:"濃硝酸",
     eq:"HNO3 + H^+ + e^- → NO2 + H2O",
     change:"HNO3 → NO2", n:1, level:"基礎",

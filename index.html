@@ -83,6 +83,14 @@
   .opt small{display:block;font-weight:400;font-size:12px;color:var(--ink-sub);margin-top:2px}
   .opt.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--card))}
   .opt.on small{color:var(--ink-sub)}
+  .opt.mode-opt{display:flex;align-items:center;gap:12px}
+  .otxt{flex:1;min-width:0}
+  .cnt{
+    flex:none;font-size:12px;font-weight:700;color:var(--ink-sub);
+    background:var(--bg);border:1px solid var(--line);border-radius:999px;
+    padding:4px 10px;font-variant-numeric:tabular-nums;
+  }
+  .opt.on .cnt{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
   .opts.row{grid-template-columns:repeat(3,1fr);gap:8px}
   .opts.row .opt{text-align:center;font-size:15px;padding:14px 6px}
 
@@ -144,6 +152,12 @@
   .verdict.ok{color:var(--ok)}
   .verdict.ng{color:var(--ng)}
   .ask{font-size:13px;color:var(--ink-sub);text-align:center;margin:0 0 10px}
+  .note{
+    margin:14px 0 0;padding:10px 12px;
+    background:var(--bg);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+    font-size:12.5px;line-height:1.75;color:var(--ink-sub);
+  }
+  .note sub,.note sup{font-size:.72em;font-weight:700}
 
   /* ---- result ---- */
   .sumgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
@@ -170,9 +184,18 @@
     <div class="block">
       <p class="label">出題形式</p>
       <div class="opts" id="modeOpts">
-        <button class="opt on" data-v="n2c">名称 → 変化<small>例：過マンガン酸イオン（酸性条件下） → MnO₄⁻ → Mn²⁺</small></button>
-        <button class="opt" data-v="c2n">変化 → 名称<small>式を見て物質名を答える</small></button>
-        <button class="opt" data-v="role">酸化剤／還元剤の判別<small>名称を見てどちらかを選ぶ</small></button>
+        <button class="opt mode-opt on" data-v="n2c"><span class="otxt">名称 → 変化<small>例：過マンガン酸イオン（酸性条件下） → MnO₄⁻ → Mn²⁺</small></span><span class="cnt">–</span></button>
+        <button class="opt mode-opt" data-v="c2n"><span class="otxt">変化 → 名称<small>式を見て物質名を答える</small></span><span class="cnt">–</span></button>
+        <button class="opt mode-opt" data-v="role"><span class="otxt">酸化剤／還元剤の判別<small>名称を見てどちらかを選ぶ</small></span><span class="cnt">–</span></button>
+      </div>
+    </div>
+
+    <div class="block">
+      <p class="label">難易度</p>
+      <div class="opts row" id="levelOpts">
+        <button class="opt" data-v="基礎">基礎</button>
+        <button class="opt" data-v="入試">入試</button>
+        <button class="opt on" data-v="all">全部</button>
       </div>
     </div>
 
@@ -278,6 +301,11 @@ function nameHTML(item, opts){
   return html;
 }
 
+/** 解説（note）。化学式は下付き・上付きに変換して表示する */
+function noteHTML(item){
+  return item.note ? '<p class="note">' + chem(item.note) + "</p>" : "";
+}
+
 function changeHTML(item, opts){
   const showRole = opts && opts.role;
   let html = '<div class="formula">' + chem(item.change) + "</div>";
@@ -294,7 +322,7 @@ const MODE_TEXT = {
   role: { q:"酸化剤・還元剤どちら？",   a:"" }
 };
 
-let cfg = { mode:"n2c", range:"all" };
+let cfg = { mode:"n2c", range:"all", level:"all" };
 let S = null;
 
 const $ = id => document.getElementById(id);
@@ -307,10 +335,10 @@ function shuffle(a){
   return a;
 }
 
-function pickItems(range){
-  if (range === "ox") return ITEMS.filter(i => i.role === "ox");
-  if (range === "rd") return ITEMS.filter(i => i.role === "rd");
-  return ITEMS.slice();
+function pickItems(range, level){
+  return ITEMS.filter(i =>
+    (range === "all" || i.role === range) &&
+    (level === "all" || i.level === level));
 }
 
 function startSession(items){
@@ -381,9 +409,9 @@ function reveal(){
   if (S.revealed) return;
   const item = S.queue[0];
   S.revealed = true;
-  $("aBody").innerHTML = (S.mode === "c2n")
+  $("aBody").innerHTML = ((S.mode === "c2n")
     ? nameHTML(item, { role:true })
-    : changeHTML(item, { role:true });
+    : changeHTML(item, { role:true })) + noteHTML(item);
   $("answerArea").classList.remove("hidden");
   $("actArea").innerHTML =
     '<p class="ask">自己採点してください</p>' +
@@ -403,7 +431,7 @@ function pickRole(v){
     '<p class="verdict ' + (ok ? "ok" : "ng") + '">' +
       (ok ? "○ 正解" : "× 不正解（正解は「" + ROLE_LABEL[item.role] + "」）") +
     "</p>" +
-    changeHTML(item, { role:true });
+    changeHTML(item, { role:true }) + noteHTML(item);
   $("answerArea").classList.remove("hidden");
 
   if (ok){
@@ -476,23 +504,26 @@ function bindOpts(wrapId, key){
     if (!b) return;
     [...$(wrapId).querySelectorAll(".opt")].forEach(x => x.classList.toggle("on", x === b));
     cfg[key] = b.dataset.v;
-    updateRangeInfo();
+    updateSetup();
   });
 }
 bindOpts("modeOpts", "mode");
+bindOpts("levelOpts", "level");
 bindOpts("rangeOpts", "range");
 
-function updateRangeInfo(){
-  const n = pickItems(cfg.range).length;
+function updateSetup(){
+  // 3モードは同じ問題プールを使うので、各モードの出題数は絞り込み結果と一致する
+  const n = pickItems(cfg.range, cfg.level).length;
+  [...document.querySelectorAll("#modeOpts .cnt")].forEach(el => { el.textContent = n + "問"; });
   let msg = n + " 問を出題します。";
   if (cfg.mode === "role" && cfg.range !== "all"){
     msg += "（判別モードは範囲を絞ると答えが一択になります）";
   }
   $("rangeInfo").textContent = msg;
 }
-updateRangeInfo();
+updateSetup();
 
-$("startBtn").addEventListener("click", () => startSession(pickItems(cfg.range)));
+$("startBtn").addEventListener("click", () => startSession(pickItems(cfg.range, cfg.level)));
 
 $("actArea").addEventListener("click", e => {
   const b = e.target.closest("button[data-act]");
