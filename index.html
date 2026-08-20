@@ -92,6 +92,8 @@
   }
   .opt.on .cnt{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
   .opts.row{grid-template-columns:repeat(3,1fr);gap:8px}
+  .block.off{opacity:.4}
+  .block.off .opts{pointer-events:none}
   .opts.row .opt{text-align:center;font-size:15px;padding:14px 6px}
 
   .btn{
@@ -107,6 +109,8 @@
   .btn:active{transform:translateY(1px)}
   .btn:disabled{opacity:.5}
   .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .nums{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .nums .btn{padding:12px 2px;min-height:54px;font-size:16px;font-variant-numeric:tabular-nums}
 
   /* ---- quiz header ---- */
   .topbar{
@@ -142,6 +146,7 @@
   }
   .chip.ox{background:var(--ox-bg);color:var(--ox);border-color:color-mix(in srgb,var(--ox) 25%,transparent)}
   .chip.rd{background:var(--red-bg);color:var(--red);border-color:color-mix(in srgb,var(--red) 25%,transparent)}
+  .chip.atom{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);font-size:14px}
   .again{
     display:inline-block;margin-top:12px;font-size:12px;font-weight:700;
     color:var(--ng);background:var(--ox-bg);border-radius:999px;padding:3px 10px;
@@ -168,6 +173,7 @@
   .miss .mname{font-weight:700;font-size:15px}
   .miss .mform{font-size:19px;font-weight:700;margin-top:6px;word-break:break-all}
   .miss .mform sub,.miss .mform sup{font-size:.62em}
+  .miss .mname sub,.miss .mname sup{font-size:.72em}
   .miss .mcnt{font-size:12px;color:var(--ng);font-weight:700;margin-top:6px}
   .perfect{text-align:center;padding:22px;color:var(--ok);font-weight:700}
   .foot{margin-top:20px;display:grid;gap:10px}
@@ -187,6 +193,7 @@
         <button class="opt mode-opt on" data-v="n2c"><span class="otxt">名称 → 変化<small>例：過マンガン酸イオン（酸性条件下） → MnO₄⁻ → Mn²⁺</small></span><span class="cnt">–</span></button>
         <button class="opt mode-opt" data-v="c2n"><span class="otxt">変化 → 名称<small>式を見て物質名を答える</small></span><span class="cnt">–</span></button>
         <button class="opt mode-opt" data-v="role"><span class="otxt">酸化剤／還元剤の判別<small>名称を見てどちらかを選ぶ</small></span><span class="cnt">–</span></button>
+        <button class="opt mode-opt" data-v="oxnum"><span class="otxt">酸化数を答える<small>化合物中の指定原子の酸化数を選ぶ</small></span><span class="cnt">–</span></button>
       </div>
     </div>
 
@@ -199,16 +206,16 @@
       </div>
     </div>
 
-    <div class="block">
+    <div class="block" id="rangeBlock">
       <p class="label">出題範囲</p>
       <div class="opts row" id="rangeOpts">
         <button class="opt" data-v="ox">酸化剤のみ</button>
         <button class="opt" data-v="rd">還元剤のみ</button>
         <button class="opt on" data-v="all">全部</button>
       </div>
-      <p class="lead" id="rangeInfo" style="margin:8px 0 0"></p>
     </div>
 
+    <p class="lead" id="rangeInfo" style="margin:-10px 0 14px"></p>
     <button class="btn btn-primary" id="startBtn">開始する</button>
   </section>
 
@@ -265,6 +272,10 @@
 
 const ROLE_LABEL = { ox:"酸化剤", rd:"還元剤" };
 
+/* 酸化数の選択肢。−4〜+7 に加え、S4O6^2- の +2.5 と Fe3O4 の +8/3 を用意する */
+const OXNUM_CHOICES = ["-4","-3","-2","-1","0","+1","+2","+2.5","+8/3","+3","+4","+5","+6","+7"];
+const numLabel = v => v.replace("-", "\u2212");
+
 /* =========================================================
    表示ユーティリティ
    ========================================================= */
@@ -301,6 +312,12 @@ function nameHTML(item, opts){
   return html;
 }
 
+/** 酸化数モードの問題（化学式＋対象原子） */
+function oxnumHTML(item){
+  return '<div class="formula">' + chem(item.f) + "</div>" +
+         '<div class="chips"><span class="chip atom">' + esc(item.atom) + " の酸化数</span></div>";
+}
+
 /** 解説（note）。化学式は下付き・上付きに変換して表示する */
 function noteHTML(item){
   return item.note ? '<p class="note">' + chem(item.note) + "</p>" : "";
@@ -319,11 +336,16 @@ function changeHTML(item, opts){
 const MODE_TEXT = {
   n2c:  { q:"この物質の変化は？",       a:"半反応式の変化" },
   c2n:  { q:"この変化をする物質は？",   a:"物質の名称" },
-  role: { q:"酸化剤・還元剤どちら？",   a:"" }
+  role: { q:"酸化剤・還元剤どちら？",   a:"" },
+  oxnum:{ q:"指定した原子の酸化数は？", a:"" }
 };
+
+/** 半反応式を使うモードか（酸化数モードだけ別の問題プールを使う） */
+const usesHalf = mode => mode !== "oxnum";
 
 let cfg = { mode:"n2c", range:"all", level:"all" };
 let S = null;
+let lastMissed = [];   // 結果画面の「間違えた問題だけもう一度」用
 
 const $ = id => document.getElementById(id);
 
@@ -333,6 +355,11 @@ function shuffle(a){
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+function poolFor(mode, range, level){
+  if (mode === "oxnum") return OXNUM.filter(q => level === "all" || q.level === level);
+  return pickItems(range, level);
 }
 
 function pickItems(range, level){
@@ -381,7 +408,9 @@ function render(){
 
   // 問題文
   $("qLabel").textContent = t.q;
-  let q = (S.mode === "c2n") ? changeHTML(item) : nameHTML(item);
+  let q = (S.mode === "oxnum") ? oxnumHTML(item)
+        : (S.mode === "c2n")      ? changeHTML(item)
+        :                           nameHTML(item);
   if (S.wrong.get(item.id) > 0) q += '<span class="again">復習 ' + S.wrong.get(item.id) + " 回ミス</span>";
   $("qBody").innerHTML = q;
 
@@ -399,6 +428,14 @@ function render(){
       '<div class="btn-row">' +
         '<button class="btn btn-ghost" data-act="pick" data-v="ox">酸化剤</button>' +
         '<button class="btn btn-ghost" data-act="pick" data-v="rd">還元剤</button>' +
+      "</div>";
+  } else if (S.mode === "oxnum"){
+    $("actArea").innerHTML =
+      '<p class="ask">酸化数を選んでください</p>' +
+      '<div class="nums">' +
+        OXNUM_CHOICES.map(v =>
+          '<button class="btn btn-ghost" data-act="picknum" data-v="' + v + '">' + numLabel(v) + "</button>"
+        ).join("") +
       "</div>";
   } else {
     $("actArea").innerHTML = '<button class="btn btn-primary" data-act="reveal">答えを見る</button>';
@@ -442,6 +479,28 @@ function pickRole(v){
   }
 }
 
+function pickNum(v){
+  if (S.judged !== null) return;
+  const item = S.queue[0];
+  const ok = (v === item.ans);
+  S.judged = ok;
+
+  $("aBody").innerHTML =
+    '<p class="verdict ' + (ok ? "ok" : "ng") + '">' +
+      (ok ? "○ 正解" : "× 不正解（あなたの答え " + numLabel(v) + "）") +
+    "</p>" +
+    '<div class="qmain">' + esc(item.atom) + " = " + numLabel(item.ans) + "</div>" +
+    noteHTML(item);
+  $("answerArea").classList.remove("hidden");
+
+  if (ok){
+    $("actArea").innerHTML = '<button class="btn btn-ghost" data-act="judge" data-v="1">次へ</button>';
+    S.timer = setTimeout(() => judge(true), 800);
+  } else {
+    $("actArea").innerHTML = '<button class="btn btn-primary" data-act="judge" data-v="0">次へ</button>';
+  }
+}
+
 function judge(ok){
   if (S.timer){ clearTimeout(S.timer); S.timer = null; }
   const item = S.queue.shift();
@@ -471,7 +530,8 @@ function finish(){
   const mm = Math.floor(sec / 60), ss = sec % 60;
 
   const roles = new Set(S.items.map(i => i.role));
-  const scope = (S.items.length === ITEMS.length) ? "全部"
+  const scope = !usesHalf(S.mode) ? S.items.length + "問"
+    : (S.items.length === ITEMS.length) ? "全部"
     : (roles.size === 1 ? ROLE_LABEL[[...roles][0]] + "のみ" : S.items.length + "問");
   $("rsLead").textContent =
     MODE_TEXT[S.mode].q + "（" + scope + "）／ 所要 " + mm + "分" + ss + "秒";
@@ -480,18 +540,22 @@ function finish(){
   $("rsRate").textContent = S.answered ? Math.round(S.correct / S.answered * 100) + "%" : "–";
   $("rsPerfect").textContent = perfect + " / " + S.items.length;
 
+  const missCard = i =>
+    '<div class="miss">' +
+      (usesHalf(S.mode)
+        ? '<div class="mname">' + esc(i.name) + ' <span class="chip ' + i.role + '">' + ROLE_LABEL[i.role] + "</span></div>" +
+          '<div class="mform">' + chem(i.change) + "</div>"
+        : '<div class="mname">' + chem(i.f) + " の " + esc(i.atom) + "</div>" +
+          '<div class="mform">' + numLabel(i.ans) + "</div>") +
+      '<div class="mcnt">' + S.wrong.get(i.id) + " 回ミス</div>" +
+    "</div>";
+
   $("rsMiss").innerHTML = missed.length
-    ? missed.map(i =>
-        '<div class="miss">' +
-          '<div class="mname">' + esc(i.name) + ' <span class="chip ' + i.role + '">' + ROLE_LABEL[i.role] + "</span></div>" +
-          '<div class="mform">' + chem(i.change) + "</div>" +
-          '<div class="mcnt">' + S.wrong.get(i.id) + " 回ミス</div>" +
-        "</div>")
-        .join("")
+    ? missed.map(missCard).join("")
     : '<div class="perfect">全問ノーミス！ 🎉</div>';
 
   $("retryMissBtn").classList.toggle("hidden", missed.length === 0);
-  $("retryMissBtn").dataset.ids = missed.map(i => i.id).join(",");
+  lastMissed = missed;
   show("result");
 }
 
@@ -512,24 +576,36 @@ bindOpts("levelOpts", "level");
 bindOpts("rangeOpts", "range");
 
 function updateSetup(){
-  // 3モードは同じ問題プールを使うので、各モードの出題数は絞り込み結果と一致する
-  const n = pickItems(cfg.range, cfg.level).length;
-  [...document.querySelectorAll("#modeOpts .cnt")].forEach(el => { el.textContent = n + "問"; });
-  let msg = n + " 問を出題します。";
-  if (cfg.mode === "role" && cfg.range !== "all"){
-    msg += "（判別モードは範囲を絞ると答えが一択になります）";
+  [...document.querySelectorAll("#modeOpts .opt")].forEach(b => {
+    b.querySelector(".cnt").textContent =
+      poolFor(b.dataset.v, cfg.range, cfg.level).length + "問";
+  });
+
+  // 酸化数モードは酸化剤・還元剤の区別がないので出題範囲を使わない
+  $("rangeBlock").classList.toggle("off", !usesHalf(cfg.mode));
+
+  const n = poolFor(cfg.mode, cfg.range, cfg.level).length;
+  let msg;
+  if (n === 0){
+    msg = "この難易度には出題できる問題がありません。難易度を変えてください。";
+  } else {
+    msg = n + " 問を出題します。";
+    if (!usesHalf(cfg.mode)) msg += "（酸化数モードでは出題範囲の指定は使いません）";
+    else if (cfg.mode === "role" && cfg.range !== "all") msg += "（判別モードは範囲を絞ると答えが一択になります）";
   }
   $("rangeInfo").textContent = msg;
+  $("startBtn").disabled = (n === 0);
 }
 updateSetup();
 
-$("startBtn").addEventListener("click", () => startSession(pickItems(cfg.range, cfg.level)));
+$("startBtn").addEventListener("click", () => startSession(poolFor(cfg.mode, cfg.range, cfg.level)));
 
 $("actArea").addEventListener("click", e => {
   const b = e.target.closest("button[data-act]");
   if (!b) return;
   if (b.dataset.act === "reveal") reveal();
   else if (b.dataset.act === "pick") pickRole(b.dataset.v);
+  else if (b.dataset.act === "picknum") pickNum(b.dataset.v);
   else if (b.dataset.act === "judge") judge(b.dataset.v === "1");
 });
 
@@ -538,10 +614,8 @@ $("quitBtn").addEventListener("click", () => {
 });
 
 $("retryAllBtn").addEventListener("click", () => startSession(S.items.slice()));
-$("retryMissBtn").addEventListener("click", e => {
-  const ids = e.currentTarget.dataset.ids.split(",").filter(Boolean).map(Number);
-  const items = ITEMS.filter(i => ids.includes(i.id));
-  if (items.length) startSession(items);
+$("retryMissBtn").addEventListener("click", () => {
+  if (lastMissed.length) startSession(lastMissed.slice());
 });
 $("backBtn").addEventListener("click", () => show("setup"));
 
@@ -550,7 +624,7 @@ document.addEventListener("keydown", e => {
   if ($("quiz").classList.contains("hidden")) return;
   if (e.key === " " || e.key === "Enter"){
     e.preventDefault();
-    if (!S.revealed && S.mode !== "role") reveal();
+    if (!S.revealed && S.mode !== "role" && S.mode !== "oxnum") reveal();
   } else if (S.revealed && (e.key === "1" || e.key === "o")) judge(true);
   else if (S.revealed && (e.key === "2" || e.key === "x")) judge(false);
 });
