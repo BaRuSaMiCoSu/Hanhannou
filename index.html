@@ -109,6 +109,13 @@
   .btn:active{transform:translateY(1px)}
   .btn:disabled{opacity:.5}
   .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .pick2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .pick2 .btn{padding:14px 6px;min-height:78px;line-height:1.35;font-size:19px}
+  .pick2 .btn small{display:block;font-size:11px;font-weight:600;opacity:.7;margin-top:4px;line-height:1.3}
+  .pick2 .btn sub,.pick2 .btn sup{font-size:.66em}
+  .prow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--ink-sub)}
+  .prow .fsm{font-size:21px;font-weight:700;color:var(--ink)}
+  .prow .fsm sub,.prow .fsm sup{font-size:.62em}
   .nums{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
   .nums .btn{padding:12px 2px;min-height:54px;font-size:16px;font-variant-numeric:tabular-nums}
 
@@ -194,6 +201,7 @@
         <button class="opt mode-opt" data-v="c2n"><span class="otxt">変化 → 名称<small>式を見て物質名を答える</small></span><span class="cnt">–</span></button>
         <button class="opt mode-opt" data-v="role"><span class="otxt">酸化剤／還元剤の判別<small>名称を見てどちらかを選ぶ</small></span><span class="cnt">–</span></button>
         <button class="opt mode-opt" data-v="oxnum"><span class="otxt">酸化数を答える<small>化合物中の指定原子の酸化数を選ぶ</small></span><span class="cnt">–</span></button>
+        <button class="opt mode-opt" data-v="which"><span class="otxt">どちらが酸化剤か判定<small>2つの物質のどちらが酸化剤かを選ぶ</small></span><span class="cnt">–</span></button>
       </div>
     </div>
 
@@ -318,6 +326,22 @@ function oxnumHTML(item){
          '<div class="chips"><span class="chip atom">' + esc(item.atom) + " の酸化数</span></div>";
 }
 
+/** 判定モードの問題（2つの物質の組み合わせ） */
+function whichHTML(item){
+  return '<div class="formula">' + chem(item.a.f) + " ＋ " + chem(item.b.f) + "</div>" +
+         (item.cond ? '<div class="chips"><span class="chip">' + esc(item.cond) + "</span></div>" : "");
+}
+
+/** 判定モードの答え（どちらが酸化剤・還元剤か） */
+function whichAnswerHTML(item){
+  const ox = item[item.ans];
+  const rd = item[item.ans === "a" ? "b" : "a"];
+  const row = (cls, label, sp) =>
+    '<div class="prow"><span class="chip ' + cls + '">' + label + "</span>" +
+    '<span class="fsm">' + chem(sp.f) + "</span>" + esc(sp.n) + "</div>";
+  return row("ox", "酸化剤", ox) + row("rd", "還元剤", rd);
+}
+
 /** 解説（note）。化学式は下付き・上付きに変換して表示する */
 function noteHTML(item){
   return item.note ? '<p class="note">' + chem(item.note) + "</p>" : "";
@@ -337,11 +361,12 @@ const MODE_TEXT = {
   n2c:  { q:"この物質の変化は？",       a:"半反応式の変化" },
   c2n:  { q:"この変化をする物質は？",   a:"物質の名称" },
   role: { q:"酸化剤・還元剤どちら？",   a:"" },
-  oxnum:{ q:"指定した原子の酸化数は？", a:"" }
+  oxnum:{ q:"指定した原子の酸化数は？", a:"" },
+  which:{ q:"酸化剤としてはたらくのはどちら？", a:"" }
 };
 
-/** 半反応式を使うモードか（酸化数モードだけ別の問題プールを使う） */
-const usesHalf = mode => mode !== "oxnum";
+/** 半反応式データ（ITEMS）を使うモードか。それ以外は専用の問題プールを持つ */
+const usesHalf = mode => mode === "n2c" || mode === "c2n" || mode === "role";
 
 let cfg = { mode:"n2c", range:"all", level:"all" };
 let S = null;
@@ -358,7 +383,9 @@ function shuffle(a){
 }
 
 function poolFor(mode, range, level){
-  if (mode === "oxnum") return OXNUM.filter(q => level === "all" || q.level === level);
+  const byLevel = pool => pool.filter(q => level === "all" || q.level === level);
+  if (mode === "oxnum") return byLevel(OXNUM);
+  if (mode === "which") return byLevel(WHICHOX);
   return pickItems(range, level);
 }
 
@@ -409,6 +436,7 @@ function render(){
   // 問題文
   $("qLabel").textContent = t.q;
   let q = (S.mode === "oxnum") ? oxnumHTML(item)
+        : (S.mode === "which")    ? whichHTML(item)
         : (S.mode === "c2n")      ? changeHTML(item)
         :                           nameHTML(item);
   if (S.wrong.get(item.id) > 0) q += '<span class="again">復習 ' + S.wrong.get(item.id) + " 回ミス</span>";
@@ -429,6 +457,14 @@ function render(){
         '<button class="btn btn-ghost" data-act="pick" data-v="ox">酸化剤</button>' +
         '<button class="btn btn-ghost" data-act="pick" data-v="rd">還元剤</button>' +
       "</div>";
+  } else if (S.mode === "which"){
+    const side = k =>
+      '<button class="btn btn-ghost" data-act="pickwhich" data-v="' + k + '">' +
+        chem(item[k].f) + "<small>" + esc(item[k].n) + "</small>" +
+      "</button>";
+    $("actArea").innerHTML =
+      '<p class="ask">酸化剤はどちらか選んでください</p>' +
+      '<div class="pick2">' + side("a") + side("b") + "</div>";
   } else if (S.mode === "oxnum"){
     $("actArea").innerHTML =
       '<p class="ask">酸化数を選んでください</p>' +
@@ -501,6 +537,28 @@ function pickNum(v){
   }
 }
 
+function pickWhich(v){
+  if (S.judged !== null) return;
+  const item = S.queue[0];
+  const ok = (v === item.ans);
+  S.judged = ok;
+
+  $("aBody").innerHTML =
+    '<p class="verdict ' + (ok ? "ok" : "ng") + '">' +
+      (ok ? "○ 正解" : "× 不正解") +
+    "</p>" +
+    whichAnswerHTML(item) +
+    noteHTML(item);
+  $("answerArea").classList.remove("hidden");
+
+  if (ok){
+    $("actArea").innerHTML = '<button class="btn btn-ghost" data-act="judge" data-v="1">次へ</button>';
+    S.timer = setTimeout(() => judge(true), 800);
+  } else {
+    $("actArea").innerHTML = '<button class="btn btn-primary" data-act="judge" data-v="0">次へ</button>';
+  }
+}
+
 function judge(ok){
   if (S.timer){ clearTimeout(S.timer); S.timer = null; }
   const item = S.queue.shift();
@@ -540,13 +598,19 @@ function finish(){
   $("rsRate").textContent = S.answered ? Math.round(S.correct / S.answered * 100) + "%" : "–";
   $("rsPerfect").textContent = perfect + " / " + S.items.length;
 
+  const missBody = i => {
+    if (S.mode === "oxnum")
+      return '<div class="mname">' + chem(i.f) + " の " + esc(i.atom) + "</div>" +
+             '<div class="mform">' + numLabel(i.ans) + "</div>";
+    if (S.mode === "which")
+      return '<div class="mname">' + chem(i.a.f) + " ＋ " + chem(i.b.f) + "</div>" +
+             '<div class="mform">' + chem(i[i.ans].f) +
+             ' <span class="chip ox">酸化剤</span></div>';
+    return '<div class="mname">' + esc(i.name) + ' <span class="chip ' + i.role + '">' + ROLE_LABEL[i.role] + "</span></div>" +
+           '<div class="mform">' + chem(i.change) + "</div>";
+  };
   const missCard = i =>
-    '<div class="miss">' +
-      (usesHalf(S.mode)
-        ? '<div class="mname">' + esc(i.name) + ' <span class="chip ' + i.role + '">' + ROLE_LABEL[i.role] + "</span></div>" +
-          '<div class="mform">' + chem(i.change) + "</div>"
-        : '<div class="mname">' + chem(i.f) + " の " + esc(i.atom) + "</div>" +
-          '<div class="mform">' + numLabel(i.ans) + "</div>") +
+    '<div class="miss">' + missBody(i) +
       '<div class="mcnt">' + S.wrong.get(i.id) + " 回ミス</div>" +
     "</div>";
 
@@ -590,7 +654,7 @@ function updateSetup(){
     msg = "この難易度には出題できる問題がありません。難易度を変えてください。";
   } else {
     msg = n + " 問を出題します。";
-    if (!usesHalf(cfg.mode)) msg += "（酸化数モードでは出題範囲の指定は使いません）";
+    if (!usesHalf(cfg.mode)) msg += "（このモードでは出題範囲の指定は使いません）";
     else if (cfg.mode === "role" && cfg.range !== "all") msg += "（判別モードは範囲を絞ると答えが一択になります）";
   }
   $("rangeInfo").textContent = msg;
@@ -606,6 +670,7 @@ $("actArea").addEventListener("click", e => {
   if (b.dataset.act === "reveal") reveal();
   else if (b.dataset.act === "pick") pickRole(b.dataset.v);
   else if (b.dataset.act === "picknum") pickNum(b.dataset.v);
+  else if (b.dataset.act === "pickwhich") pickWhich(b.dataset.v);
   else if (b.dataset.act === "judge") judge(b.dataset.v === "1");
 });
 
@@ -624,7 +689,7 @@ document.addEventListener("keydown", e => {
   if ($("quiz").classList.contains("hidden")) return;
   if (e.key === " " || e.key === "Enter"){
     e.preventDefault();
-    if (!S.revealed && S.mode !== "role" && S.mode !== "oxnum") reveal();
+    if (!S.revealed && MODE_TEXT[S.mode].a) reveal();
   } else if (S.revealed && (e.key === "1" || e.key === "o")) judge(true);
   else if (S.revealed && (e.key === "2" || e.key === "x")) judge(false);
 });
